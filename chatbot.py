@@ -2,8 +2,10 @@ import openai
 import os
 import json
 
-# Load OpenAI API key from environment variables
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# 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
+openai.api_key = "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"
+openai.api_base = "https://openrouter.ai/api/v1"
+
 
 # Memory storage file
 MEMORY_FILE = "memory.json"
