@@ -1,53 +1,70 @@
-import openai
-import os
+import google.generativeai as genai
 import json
+import os
+from datetime import datetime
 
-# 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
-openai.api_key = "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"
-openai.api_base = "https://openrouter.ai/api/v1"
+# Set up API key securely
+genai.configure(api_key="YOUR_API_KEY_HERE")
 
+# Function to load story memory
+def load_memory(story_name):
+    filename = f"memory_{story_name}.json"
+    if os.path.exists(filename):
+        with open(filename, "r") as file:
+            return json.load(file)
+    return []  # Start fresh if no memory exists
 
-# Memory storage file
-MEMORY_FILE = "memory.json"
+# Function to save story memory
+def save_memory(story_name, memory):
+    filename = f"memory_{story_name}.json"
+    with open(filename, "w") as file:
+        json.dump(memory, file, indent=4)
 
-# Load existing memory if available
-if os.path.exists(MEMORY_FILE):
-    with open(MEMORY_FILE, "r") as f:
-        memory_lanes = json.load(f)
-else:
-    memory_lanes = {}
+# Function to retrieve relevant past messages
+def get_relevant_memory(memory, limit=5):
+    return "\n".join([f"User: {m['user']}\nChatbot: {m['chatbot']}" for m in memory[-limit:]])
 
-def chat_with_ai(user_input, story_name):
-    """
-    Handles conversation with AI, storing memory separately for different stories.
-    """
-    if story_name not in memory_lanes:
-        memory_lanes[story_name] = []  # Create new memory lane for a story
+# Choose a story
+story_name = input("Which story are you working on? ").strip()
+chat_memory = load_memory(story_name)
 
-    # Add user input to memory
-    memory_lanes[story_name].append({"role": "user", "content": user_input})
+# Select a valid model
+model = genai.GenerativeModel("gemini-1.5-pro-002")
 
-    # Call OpenAI API
-    response = openai.chat.completions.create(
-        model="gpt-3.5-turbo",
-        messages=memory_lanes[story_name]  # Uses stored conversation history
-    )
+print(f"Chatbot initialized for story: {story_name}\nType 'switch to [story]' to change stories.")
 
-    reply = response.choices[0].message.content  # Extract AI response
-    memory_lanes[story_name].append({"role": "assistant", "content": reply})
+while True:
+    user_input = input("You: ").strip()
+    
+    if user_input.lower() in ["exit", "quit", "bye"]:
+        print("Chatbot: Goodbye!")
+        save_memory(story_name, chat_memory)
+        break
 
-    # Save updated memory
-    with open(MEMORY_FILE, "w") as f:
-        json.dump(memory_lanes, f, indent=4)
+    if user_input.lower().startswith("switch to "):
+        save_memory(story_name, chat_memory)
+        story_name = user_input[10:].strip()
+        chat_memory = load_memory(story_name)
+        print(f"Switched to story: {story_name}")
+        continue
 
-    return reply
+    # Retrieve past relevant messages
+    past_context = get_relevant_memory(chat_memory, limit=5)
+    full_prompt = f"Memory:\n{past_context}\nUser: {user_input}\nChatbot:"
 
-if __name__ == "__main__":
-    print("AI Storyteller - Type 'exit' to stop.")
-    story_name = input("Enter story name: ")  # Ask for a story memory lane
+    # Generate AI response
+    response = model.generate_content(full_prompt)
+    chatbot_reply = response.text if hasattr(response, "text") else response.candidates[0].content.parts[0].text
 
-    while True:
-        user_input = input(f"You ({story_name}): ")
-        if user_input.lower() in ["exit", "quit"]:
-            break
-        print("AI:", chat_with_ai(user_input, story_name))
+    # Store in memory with timestamps
+    chat_memory.append({
+        "timestamp": str(datetime.now()),
+        "user": user_input,
+        "chatbot": chatbot_reply
+    })
+
+    # Save memory
+    save_memory(story_name, chat_memory)
+
+    print("Chatbot:", chatbot_reply)
+    print("")
