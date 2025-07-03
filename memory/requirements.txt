@@ -1,0 +1,2 @@
+google-generativeai
+py2neo
